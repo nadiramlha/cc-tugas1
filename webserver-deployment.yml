@@ -1,0 +1,94 @@
+- name: Ansible
+  hosts: localhost
+  become: true
+
+  vars:
+    web_root: "/var/www/html"
+    git_repo: "https://github.com/rm77/web-sample-6.git"
+
+  tasks:
+    - name: Update packages
+      apt:
+        update_cache: yes
+
+    - name: Install LAMP with packages
+      apt:
+        name:
+          - apache2
+          - mysql-server
+          - php
+          - libapache2-mod-php
+          - php-mysql
+          - phpmyadmin
+          - git
+          - unzip
+        state: present
+
+    - name: Apache checking
+      service:
+        name: apache2
+        state: started
+        enabled: true
+
+    - name: MySQL checking
+      service:
+        name: mysql
+        state: started
+        enabled: true
+
+    - name: Config file phpMyAdmin
+      copy:
+        dest: "/etc/phpmyadmin/config.inc.php"
+        content: |
+          <?php
+          $cfg['blowfish_secret'] = 'key';
+          $i = 0;
+          $i++;
+          $cfg['Servers'][$i]['auth_type'] = 'cookie';
+          $cfg['Servers'][$i]['host'] = 'localhost';
+          $cfg['Servers'][$i]['AllowNoPassword'] = false;
+          ?>
+
+    - name: Remove existing web
+      file:
+        path: "{{ web_root }}"
+        state: absent
+
+    - name: Clone Github repository
+      git:
+        repo: "{{ git_repo }}"
+        dest: "{{ web_root }}"
+        update: yes
+        force: yes
+
+    - name: Set permission web
+      file:
+        path: "{{ web_root }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: "0755"
+        recurse: yes
+
+    - name: Create symlink phpMyAdmin
+      file:
+        src: /etc/phpmyadmin/apache.conf
+        dest: /etc/apache2/conf-available/phpmyadmin.conf
+        state: link
+
+    - name: Checking Apache DocumentRoot
+      lineinfile:
+        path: /etc/apache2/sites-available/000-default.conf
+        regexp: '^\s*DocumentRoot'
+        line: "DocumentRoot {{ web_root }}"
+        state: present
+
+    - name: Enable phpMyAdmin
+      command:
+        cmd: a2enconf phpmyadmin
+
+    - name: Reload Apache to apply changes
+      service:
+        name: apache2
+        state: reloaded
+
